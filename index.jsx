@@ -6,9 +6,8 @@ import CalendarView from './components/CalendarView';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('tutor');
-  const [schedules, setSchedules] = useState([]); // 캘린더 일정 전역 상태
+  const [schedules, setSchedules] = useState([]);
 
-  // 일정 추가 함수 (채팅방 확정, 장소 예약 시 호출)
   const addSchedule = (newSchedule) => {
     setSchedules((prev) => [...prev, newSchedule]);
   };
