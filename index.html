@@ -6,9 +6,8 @@
     <title>과외 & 멘토링 매칭 앱</title>
     
     <!-- 지도 API (Leaflet CSS & JS) -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
+    <!-- 카카오맵 API -->
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=56356d32a2276841216de31062db552d></script>
     <style>
         /* 기본 레이아웃 */
         body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: 'Malgun Gothic', sans-serif; }
@@ -276,59 +275,78 @@
     // 초기 방 목록 렌더링 실행
     renderRooms();
 
-    // --- 3. 실제 지도(Leaflet API) 및 GPS 기능 ---
-    let mapInstance = null;
+   // --- 3. 실제 지도(카카오맵 API) 및 GPS 기능 ---
+let mapInstance = null; // 지도 객체를 담을 변수
 
-    function initMapWithLocation() {
-        const status = document.getElementById('location-status');
-        status.innerText = "GPS 위치 탐색 중...";
-        
-        // 기본 좌표 (대전시청)
-        let lat = 36.3504;
-        let lng = 127.3845;
+function initMapWithLocation() {
+    const status = document.getElementById('location-status');
+    status.innerText = "GPS 위치 탐색 중...";
+    
+    // 기본 좌표 (예: 대전시청)
+    let lat = 36.3504;
+    let lng = 127.3845;
 
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    lat = pos.coords.latitude;
-                    lng = pos.coords.longitude;
-                    status.innerText = `📍 현재 위치 로드 성공!`;
-                    drawMap(lat, lng);
-                },
-                (err) => {
-                    status.innerText = "📍 위치 권한 거부 (기본 위치인 대전으로 표시됩니다)";
-                    drawMap(lat, lng);
-                }
-            );
-        } else {
-            drawMap(lat, lng);
-        }
+    // 브라우저 GPS 권한 요청
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                lat = pos.coords.latitude;
+                lng = pos.coords.longitude;
+                status.innerText = `📍 현재 위치 로드 성공!`;
+                drawKakaoMap(lat, lng);
+            },
+            (err) => {
+                status.innerText = "📍 위치 권한 거부 (기본 위치로 표시됩니다)";
+                drawKakaoMap(lat, lng);
+            }
+        );
+    } else {
+        drawKakaoMap(lat, lng);
+    }
+}
+
+// 실제 카카오 지도를 화면에 그리는 함수
+function drawKakaoMap(lat, lng) {
+    document.getElementById('places-list').style.display = 'block';
+
+    const mapContainer = document.getElementById('map'); // 지도를 표시할 div
+    const centerPosition = new kakao.maps.LatLng(lat, lng); // 중심 좌표 객체 생성
+
+    // 1. 지도 생성 또는 중심 이동
+    if (mapInstance === null) {
+        // 지도가 없으면 새로 생성
+        const mapOption = {
+            center: centerPosition, 
+            level: 3 // 확대 레벨 (작을수록 확대됨)
+        };
+        mapInstance = new kakao.maps.Map(mapContainer, mapOption);
+    } else {
+        // 이미 지도가 있으면 부드럽게 중심만 이동
+        mapInstance.panTo(centerPosition);
     }
 
-    function drawMap(lat, lng) {
-        document.getElementById('places-list').style.display = 'block';
+    // 2. 내 위치에 핀(마커) 꽂기
+    const myMarker = new kakao.maps.Marker({
+        position: centerPosition
+    });
+    myMarker.setMap(mapInstance);
 
-        // 맵이 이미 생성되어 있다면 위치만 이동
-        if (mapInstance !== null) {
-            mapInstance.setView([lat, lng], 15);
-            return;
-        }
+    // 3. 내 위치 주변의 스터디카페 마커 꽂기 (가상 좌표 적용)
+    // 실제 개발 시에는 백엔드 DB에서 장소 좌표 목록을 가져와서 for문으로 돌립니다.
+    const studyRoomPos = new kakao.maps.LatLng(lat + 0.002, lng + 0.002);
+    const studyMarker = new kakao.maps.Marker({
+        position: studyRoomPos
+    });
+    studyMarker.setMap(mapInstance);
 
-        // 새 지도 생성 및 OpenStreetMap 타일 불러오기
-        mapInstance = L.map('map').setView([lat, lng], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(mapInstance);
-
-        // 내 위치 마커 추가
-        L.marker([lat, lng]).addTo(mapInstance)
-            .bindPopup('<b>현재 내 위치</b>')
-            .openPopup();
-            
-        // 주변 스터디카페 가상 마커 추가 (내 위치 근처)
-        L.marker([lat + 0.002, lng + 0.002]).addTo(mapInstance).bindPopup('토즈 스터디룸');
-        L.marker([lat - 0.003, lng + 0.001]).addTo(mapInstance).bindPopup('희망 지역아동센터');
-    }
+    // 4. 스터디카페 마커 위에 말풍선(인포윈도우) 띄우기
+    const iwContent = '<div style="padding:5px; font-size:12px; color:#333;">토즈 스터디룸</div>';
+    const infowindow = new kakao.maps.InfoWindow({
+        content: iwContent
+    });
+    infowindow.open(mapInstance, studyMarker);
+}
+    
 
     function reservePlace(placeName, time) {
         schedules.push({
