@@ -2,14 +2,14 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <!-- 모바일 화면 꽉 차게, 비율 깨짐 방지 (필수) -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>과외 & 멘토링 매칭 앱</title>
     
-    <!-- ★카카오맵 API (반드시 https:// 로 시작해야 깃허브 모바일에서 차단 안 됨)★ -->
+    <!-- ★카카오맵 API (본인의 JavaScript 키 입력)★ -->
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=56356d32a2276841216de31062db552d"></script>
 
     <style>
+        /* 기본 레이아웃 및 탭 스타일 */
         body { margin: 0; padding: 0; background-color: #f0f0f0; font-family: 'Malgun Gothic', sans-serif; }
         #app-container { max-width: 480px; margin: 0 auto; background: #f9f9f9; height: 100vh; display: flex; flex-direction: column; border: 1px solid #ddd; }
         header { background: #4A90E2; color: white; padding: 16px; text-align: center; font-size: 18px; font-weight: bold; }
@@ -21,12 +21,25 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
+        /* 공통 UI 요소 */
         .card { background: white; padding: 16px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 12px; }
         .btn-primary { background: #4A90E2; color: white; border: none; padding: 10px; width: 100%; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .btn-warning { background: #F5A623; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+        .btn-danger { background: #E24A4A; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-warning { background: #F5A623; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
         
-        /* 모바일에서 지도가 보이려면 높이가 반드시 고정되어야 함 */
+        /* 채팅방 스타일 */
+        .chat-box { height: 300px; background: white; border: 1px solid #ddd; padding: 10px; overflow-y: auto; margin-bottom: 10px; border-radius: 8px; }
+        .chat-input-area { display: flex; gap: 8px; }
+        .chat-input-area input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        
+        /* 지도 영역 */
         #map { height: 250px; width: 100%; border-radius: 8px; margin-bottom: 16px; }
+
+        /* 캘린더 날짜 선택기 스타일 */
+        .date-selector { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 8px; }
+        .date-item { min-width: 60px; padding: 12px 0; text-align: center; border-radius: 8px; cursor: pointer; border: 1px solid #ddd; background: white; position: relative; }
+        .date-item.active { background: #4A90E2; color: white; border-color: #4A90E2; }
+        .event-dot { width: 6px; height: 6px; background: #E24A4A; border-radius: 50%; position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); }
     </style>
 </head>
 <body>
@@ -41,48 +54,117 @@
                 <h2 style="margin-top:0;">👨‍🏫 김선생</h2>
                 <p style="color: #666;">과목: 수학 / 고등과정</p>
                 <p>충남대 컴퓨터융합학부 / 기초부터 심화까지 완벽하게 잡아드립니다.</p>
+                <button class="btn-primary" onclick="toggleTutorChat()">1:1 채팅하기</button>
+            </div>
+            <div id="tutor-chat-area" style="display: none;" class="card">
+                <h3 style="margin-top:0;">💬 김선생님과 채팅</h3>
+                <div class="chat-box" id="tutor-chat-box" style="height: 200px;">
+                    <div><strong>김선생:</strong> 안녕하세요, 과외 문의 주셨나요?</div>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="tutor-msg" placeholder="메시지 입력...">
+                    <button class="btn-primary" style="width: 60px;" onclick="sendTutorMsg()">전송</button>
+                </div>
             </div>
         </section>
 
-        <!-- 3. 장소 대여 탭 (지도 영역) -->
+        <!-- 2. 교육봉사 탭 (방 목록 및 멘토/멘티 채팅) -->
+        <section id="tab-volunteer" class="tab-content">
+            <!-- [A] 방 목록 화면 -->
+            <div id="room-list-view">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0;">📢 멘토링 단톡방 목록</h3>
+                    <button class="btn-primary" style="width: auto; padding: 8px 12px;" onclick="createRoom()">+ 방 새로파기</button>
+                </div>
+                <div id="rooms-container">
+                    <!-- 자바스크립트로 방 목록이 렌더링 됩니다 -->
+                </div>
+            </div>
+
+            <!-- [B] 채팅방 내부 화면 -->
+            <div id="room-chat-view" style="display: none; height: 100%; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <button onclick="backToRoomList()" style="background:none; border:none; color:#4A90E2; font-weight:bold; cursor:pointer;">⬅ 뒤로</button>
+                    <h3 id="current-room-title" style="margin: 0; font-size:15px; flex:1; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">방 제목</h3>
+                    <button class="btn-danger" id="btn-confirm" onclick="confirmVolunteer()">일정 확정</button>
+                </div>
+                <div class="chat-box" id="volunteer-chat-box" style="flex: 1;"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="volunteer-msg" placeholder="메시지 입력...">
+                    <button class="btn-primary" style="width: 60px;" id="btn-send-vol" onclick="sendVolunteerMsg()">전송</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. 장소 대여 탭 (지도 예약) -->
         <section id="tab-map" class="tab-content">
-            <h3>🗺️ 주변 스터디룸 예약</h3>
-            <button class="btn-primary" style="margin-bottom:10px;" onclick="initMapWithLocation()">📍 내 위치 확인하기</button>
-            <p id="location-status" style="color: green; font-size: 12px; margin-bottom: 8px;">지도 탭을 열면 지도가 표시됩니다.</p>
+            <h3 style="margin-top:0;">🗺️ 스터디룸 및 장소 예약</h3>
+            <button class="btn-primary" style="margin-bottom:10px;" onclick="initMapWithLocation()">📍 내 위치(GPS) 주변 검색</button>
+            <p id="location-status" style="color: green; font-size: 12px; margin-bottom: 8px;">지도 탭을 열면 자동으로 지도가 표시됩니다.</p>
             
-            <!-- 실제 지도가 그려질 영역 -->
             <div id="map"></div>
 
             <div id="places-list" style="display: none;">
                 <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <strong>토즈 스터디룸 (유성점)</strong>
-                        <div style="font-size: 12px; color: #666;">거리: 300m | 빈 시간: 15:00</div>
+                        <strong style="font-size: 15px;">토즈 스터디룸 (유성점)</strong>
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">거리: 300m | 예약 가능: 오늘 15:00</div>
                     </div>
-                    <button class="btn-warning" onclick="alert('예약 완료!')">예약</button>
+                    <button class="btn-warning" onclick="reservePlace('토즈 스터디룸 (유성점)', '15:00')">예약하기</button>
+                </div>
+                <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="font-size: 15px;">희망 지역아동센터</strong>
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">거리: 800m | 예약 가능: 오늘 17:30</div>
+                    </div>
+                    <button class="btn-warning" onclick="reservePlace('희망 지역아동센터', '17:30')">예약하기</button>
                 </div>
             </div>
         </section>
         
-        <!-- 4. 임시 캘린더 탭 -->
+        <!-- 4. 캘린더 및 시간표 탭 -->
         <section id="tab-calendar" class="tab-content">
-            <h3>📅 일정</h3>
+            <h3 style="margin-top:0;">📅 캘린더 및 시간표</h3>
+            
+            <!-- 상단 날짜 선택기 -->
+            <div class="date-selector" id="calendar-dates">
+                <!-- JS에서 5일치 날짜가 렌더링 됨 -->
+            </div>
+
+            <!-- 선택된 날짜의 시간표 리스트 -->
+            <h4 id="selected-date-text" style="color: #4A90E2; border-bottom: 2px solid #eee; padding-bottom: 8px;">오늘의 일정</h4>
+            <div id="schedule-list">
+                <!-- JS에서 일정이 렌더링 됨 -->
+            </div>
         </section>
     </main>
 
-    <!-- 하단 탭 -->
     <nav>
         <button id="nav-tutor" class="active" onclick="switchTab('tutor')">과외매칭</button>
+        <button id="nav-volunteer" onclick="switchTab('volunteer')">교육봉사</button>
         <button id="nav-map" onclick="switchTab('map')">장소예약</button>
-        <button id="nav-calendar" onclick="switchTab('calendar')">일정</button>
+        <button id="nav-calendar" onclick="switchTab('calendar')">캘린더</button>
     </nav>
 </div>
 
 <script>
-    let mapInstance = null;
-    let currentCenter = null;
+    // ==========================================
+    // 0. 공통 상태 및 유틸리티 (두뇌 역할)
+    // ==========================================
+    let schedules = []; // 전체 일정을 담는 배열 { date: 'YYYY-MM-DD', time: 'HH:MM', title: '...', type: '...' }
+    
+    // 날짜 구하는 헬퍼 함수 (0이면 오늘, 1이면 내일 반환 'YYYY-MM-DD')
+    function getFormattedDate(daysToAdd = 0) {
+        const d = new Date();
+        d.setDate(d.getDate() + daysToAdd);
+        return d.toISOString().split('T')[0]; // "2024-10-05" 형식 반환
+    }
 
-    // --- 탭 전환 및 지도 레이아웃 강제 업데이트 로직 ---
+    let selectedDate = getFormattedDate(0); // 캘린더 탭에서 기본으로 선택된 날짜 (오늘)
+
+    // ==========================================
+    // 1. 탭 전환 제어 및 지도 레이아웃 갱신
+    // ==========================================
     function switchTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
@@ -90,28 +172,163 @@
         document.getElementById('tab-' + tabName).classList.add('active');
         document.getElementById('nav-' + tabName).classList.add('active');
 
-        // ★ 모바일 하얀 화면 해결의 핵심 키포인트 ★
-        // 지도 탭을 눌렀을 때만 지도를 새로고침 해줍니다.
+        // 지도 탭: 깨짐 방지 레이아웃 강제 갱신
         if (tabName === 'map') {
             if (mapInstance === null) {
-                // 처음 지도 탭에 들어왔으면 지도 초기화 실행
                 initMapWithLocation();
             } else {
-                // 이미 그려져 있다면 리사이즈(relayout) 후 중심을 다시 맞춤
                 setTimeout(() => {
                     mapInstance.relayout();
                     mapInstance.setCenter(currentCenter);
                 }, 100);
             }
         }
+
+        // 캘린더 탭: 최신 일정 데이터 렌더링
+        if (tabName === 'calendar') {
+            renderCalendarView();
+        }
     }
 
-    // --- GPS 확인 및 카카오맵 로드 ---
+    // ==========================================
+    // 2. 1:1 과외 매칭 기능
+    // ==========================================
+    function toggleTutorChat() {
+        const chatArea = document.getElementById('tutor-chat-area');
+        chatArea.style.display = chatArea.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function sendTutorMsg() {
+        const input = document.getElementById('tutor-msg');
+        if(!input.value.trim()) return;
+        const chatBox = document.getElementById('tutor-chat-box');
+        chatBox.innerHTML += `<div style="text-align: right; margin-top:8px;"><strong>나:</strong> ${input.value}</div>`;
+        input.value = '';
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // ==========================================
+    // 3. 교육봉사 단톡방 파기 및 멘토/멘티 채팅
+    // ==========================================
+    let rooms = [
+        { id: 1, title: '중2 수학 기초 멘토링 구해요!', isConfirmed: false, messages: ["<div style='margin-bottom:8px;'><strong>멘티(학생A):</strong> 수학 기초 알려주실 멘토님 있나요?</div>"] },
+        { id: 2, title: '대전 영어 회화 단톡방', isConfirmed: false, messages: ["<div style='margin-bottom:8px;'><strong>멘토(대학생B):</strong> 토요일 오전에 모일 분?</div>"] }
+    ];
+    let currentRoomId = null;
+
+    // 방 목록 그리기
+    function renderRooms() {
+        const container = document.getElementById('rooms-container');
+        container.innerHTML = '';
+        rooms.forEach(room => {
+            container.innerHTML += `
+                <div class="card" onclick="enterRoom(${room.id})" style="border-left: 4px solid ${room.isConfirmed ? '#ccc' : '#E24A4A'}; cursor: pointer;">
+                    <h4 style="margin:0 0 8px 0; color: ${room.isConfirmed ? '#999' : '#333'};">${room.title}</h4>
+                    <span style="font-size:12px; padding:4px 8px; background:${room.isConfirmed ? '#eee' : '#ffe0e0'}; color:${room.isConfirmed ? '#888' : '#d93838'}; border-radius:4px; font-weight:bold;">
+                        ${room.isConfirmed ? '일정 확정 (마감)' : '멘토/멘티 모집중'}
+                    </span>
+                </div>
+            `;
+        });
+    }
+
+    // 방 새로 파기
+    function createRoom() {
+        const title = prompt("새로운 단톡방 제목을 입력하세요:");
+        if(!title) return;
+        const newRoom = { id: Date.now(), title: title, isConfirmed: false, messages: [] };
+        rooms.push(newRoom);
+        renderRooms();
+    }
+
+    // 방 들어가기
+    function enterRoom(id) {
+        currentRoomId = id;
+        const room = rooms.find(r => r.id === id);
+        
+        document.getElementById('room-list-view').style.display = 'none';
+        document.getElementById('room-chat-view').style.display = 'flex';
+        document.getElementById('current-room-title').innerText = room.title;
+        
+        const chatBox = document.getElementById('volunteer-chat-box');
+        chatBox.innerHTML = room.messages.join('');
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        const btnConfirm = document.getElementById('btn-confirm');
+        const input = document.getElementById('volunteer-msg');
+        const btnSend = document.getElementById('btn-send-vol');
+        
+        if (room.isConfirmed) {
+            btnConfirm.innerText = "확정 완료됨";
+            btnConfirm.style.background = "#ccc";
+            btnConfirm.disabled = true;
+            input.disabled = true;
+            btnSend.disabled = true;
+            input.placeholder = "일정이 확정되어 대화가 마감되었습니다.";
+        } else {
+            btnConfirm.innerText = "일정 확정";
+            btnConfirm.style.background = "#E24A4A";
+            btnConfirm.disabled = false;
+            input.disabled = false;
+            btnSend.disabled = false;
+            input.placeholder = "메시지 입력...";
+        }
+    }
+
+    function backToRoomList() {
+        currentRoomId = null;
+        document.getElementById('room-list-view').style.display = 'block';
+        document.getElementById('room-chat-view').style.display = 'none';
+        renderRooms(); 
+    }
+
+    function sendVolunteerMsg() {
+        const input = document.getElementById('volunteer-msg');
+        if(!input.value.trim() || !currentRoomId) return;
+        
+        const room = rooms.find(r => r.id === currentRoomId);
+        const msgHtml = `<div style="text-align: right; margin-bottom:8px;"><strong>나:</strong> ${input.value}</div>`;
+        room.messages.push(msgHtml);
+        
+        const chatBox = document.getElementById('volunteer-chat-box');
+        chatBox.innerHTML += msgHtml;
+        chatBox.scrollTop = chatBox.scrollHeight;
+        input.value = '';
+    }
+
+    // ★ 교육봉사 일정 확정 및 캘린더 연동 ★
+    function confirmVolunteer() {
+        if(!currentRoomId) return;
+        const room = rooms.find(r => r.id === currentRoomId);
+        
+        // 내일 날짜로 일정 추가 (테스트용)
+        const tomorrow = getFormattedDate(1);
+        
+        schedules.push({
+            date: tomorrow,
+            time: '14:00',
+            title: room.title,
+            type: '멘토링'
+        });
+
+        room.isConfirmed = true; 
+        
+        alert('일정이 확정되어 [내일] 캘린더에 추가되었습니다!');
+        backToRoomList(); 
+    }
+
+    renderRooms(); // 초기 방 목록 그리기
+
+    // ==========================================
+    // 4. 지도 API 및 장소 예약 연동
+    // ==========================================
+    let mapInstance = null;
+    let currentCenter = null;
+
     function initMapWithLocation() {
         const status = document.getElementById('location-status');
         status.innerText = "GPS 위치 찾는 중...";
         
-        // 위치 못 찾을 경우 기본 위치 (대전 시청)
         let defaultLat = 36.3504;
         let defaultLng = 127.3845;
 
@@ -125,50 +342,113 @@
                     status.innerText = "📍 위치 권한 거부됨 (기본 위치로 표시)";
                     drawKakaoMap(defaultLat, defaultLng);
                 },
-                { enableHighAccuracy: false, timeout: 5000 } // ★ 5초 내에 응답 없으면 무조건 에러처리 (먹통 방지)
+                { enableHighAccuracy: false, timeout: 5000 }
             );
         } else {
             drawKakaoMap(defaultLat, defaultLng);
         }
     }
 
-    // --- 실제 카카오맵 렌더링 ---
     function drawKakaoMap(lat, lng) {
         document.getElementById('places-list').style.display = 'block';
-
         const mapContainer = document.getElementById('map'); 
         currentCenter = new kakao.maps.LatLng(lat, lng); 
 
-        // 최초 1회만 지도 생성
         if (mapInstance === null) {
-            const mapOption = {
-                center: currentCenter, 
-                level: 3 
-            };
-            mapInstance = new kakao.maps.Map(mapContainer, mapOption);
+            mapInstance = new kakao.maps.Map(mapContainer, { center: currentCenter, level: 3 });
         } else {
             mapInstance.setCenter(currentCenter);
         }
 
-        // 내 위치 마커 생성
-        const myMarker = new kakao.maps.Marker({
-            position: currentCenter
-        });
-        myMarker.setMap(mapInstance);
+        // 마커 생성
+        new kakao.maps.Marker({ position: currentCenter, map: mapInstance });
+        
+        const studyMarker1 = new kakao.maps.Marker({ position: new kakao.maps.LatLng(lat + 0.002, lng + 0.002), map: mapInstance });
+        const studyMarker2 = new kakao.maps.Marker({ position: new kakao.maps.LatLng(lat - 0.001, lng + 0.003), map: mapInstance });
 
-        // 스터디카페 가상 마커 생성
-        const studyRoomPos = new kakao.maps.LatLng(lat + 0.002, lng + 0.002);
-        const studyMarker = new kakao.maps.Marker({
-            position: studyRoomPos
-        });
-        studyMarker.setMap(mapInstance);
-
-        // 마커 위에 말풍선 표시
-        const infowindow = new kakao.maps.InfoWindow({
-            content: '<div style="padding:5px; font-size:12px;">토즈 스터디룸</div>'
-        });
-        infowindow.open(mapInstance, studyMarker);
+        new kakao.maps.InfoWindow({ content: '<div style="padding:5px; font-size:12px;">토즈 스터디룸</div>' }).open(mapInstance, studyMarker1);
     }
+
+    // ★ 장소 예약 및 캘린더 연동 ★
+    function reservePlace(placeName, time) {
+        // 오늘 날짜로 일정 추가
+        const today = getFormattedDate(0);
+        
+        schedules.push({
+            date: today,
+            time: time,
+            title: placeName,
+            type: '장소예약'
+        });
+        
+        alert(`${placeName}이(가) 예약되어 [오늘] 캘린더에 추가되었습니다!`);
+    }
+
+    // ==========================================
+    // 5. 캘린더 및 시간표 기능
+    // ==========================================
+    
+    // 날짜를 클릭했을 때 실행
+    function selectDate(dateStr) {
+        selectedDate = dateStr;
+        renderCalendarView();
+    }
+
+    // 캘린더 전체 화면 그리기 (날짜 바 + 하단 시간표)
+    function renderCalendarView() {
+        const datesContainer = document.getElementById('calendar-dates');
+        const listDiv = document.getElementById('schedule-list');
+        
+        // 일정이 있는 날짜(YYYY-MM-DD) 추출
+        const datesWithEvents = schedules.map(s => s.date);
+
+        // 1. 상단 5일치 날짜 바 그리기
+        datesContainer.innerHTML = '';
+        for(let i = 0; i < 5; i++) {
+            const dStr = getFormattedDate(i); // 날짜 문자열 계산
+            const dObj = new Date();
+            dObj.setDate(dObj.getDate() + i);
+            const dayNum = dObj.getDate(); // 며칠인지 (예: 15)
+            
+            const isActive = (dStr === selectedDate) ? 'active' : '';
+            const hasEvent = datesWithEvents.includes(dStr);
+
+            datesContainer.innerHTML += `
+                <div class="date-item ${isActive}" onclick="selectDate('${dStr}')">
+                    <div style="font-size: 11px; margin-bottom: 2px;">${i === 0 ? '오늘' : i === 1 ? '내일' : ''}</div>
+                    <div style="font-size: 18px; font-weight: bold;">${dayNum}일</div>
+                    ${hasEvent ? '<div class="event-dot"></div>' : ''}
+                </div>
+            `;
+        }
+
+        // 2. 하단 선택된 날짜의 시간표 그리기
+        document.getElementById('selected-date-text').innerText = `${selectedDate.split('-')[1]}월 ${selectedDate.split('-')[2]}일 일정표`;
+        
+        const dailySchedules = schedules.filter(s => s.date === selectedDate);
+        
+        if(dailySchedules.length === 0) {
+            listDiv.innerHTML = '<div class="card" style="text-align: center; color: #999; padding: 30px;">이 날은 등록된 일정이 없습니다.</div>';
+            return;
+        }
+
+        // 시간을 기준으로 오름차순 정렬 후 렌더링
+        let html = '';
+        dailySchedules.sort((a, b) => a.time.localeCompare(b.time)).forEach(schedule => {
+            html += `
+            <div class="card" style="display:flex; align-items:center;">
+                <div style="font-weight:bold; color:#4A90E2; font-size:18px; width:70px;">${schedule.time}</div>
+                <div style="flex: 1; border-left: 2px solid #eee; padding-left: 12px;">
+                    <div style="font-weight:bold; font-size:15px; margin-bottom: 4px;">${schedule.title}</div>
+                    <span style="font-size:11px; background:${schedule.type === '멘토링' ? '#ffe0e0' : '#e0f0ff'}; color:${schedule.type === '멘토링' ? '#d93838' : '#4A90E2'}; padding:2px 6px; border-radius:4px; font-weight:bold;">
+                        ${schedule.type}
+                    </span>
+                </div>
+            </div>`;
+        });
+        listDiv.innerHTML = html;
+    }
+
 </script>
 
 </body>
